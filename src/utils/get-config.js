@@ -10,6 +10,7 @@ const baseConfig = {
 		amount: 1,
 		channel: "",
 		direction: 1,
+		multipleBySameUser: false,
 	},
 	goal: {
 		announce: true,

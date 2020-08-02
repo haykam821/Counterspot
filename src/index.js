@@ -239,8 +239,8 @@ class Counterspot {
 					name: "Expected Count",
 					value: expectedCount,
 				}]);
-			} else if (this.cache.lastCounter === message.author.id) {
-				// Return this.reportCountIssue(message, "Cannot count multiple times in a row", "👥");
+			} else if (this.cache.lastCounter === message.author.id && !this.config.count.multipleBySameUser) {
+				return this.reportCountIssue(message, "Cannot count multiple times in a row", "👥");
 			}
 
 			const reachedGoal = typeof this.config.goal === "object" && count % this.config.goal.multiple === 0;
