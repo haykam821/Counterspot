@@ -14,6 +14,10 @@ const baseConfig = {
 	report: {
 		addReaction: true,
 		deletionTimeout: 5000,
+		log: {
+			channel: "",
+			showAdditionalFields: true,
+		},
 		showAuthor: false,
 		showTimestamp: true,
 	},

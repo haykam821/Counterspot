@@ -28,6 +28,12 @@ class Counterspot {
 			 */
 			lastCounter: null,
 		};
+
+		/**
+		 * The channel to log to.
+		 * @type {djs.TextBasedChannel?}
+		 */
+		this.logChannel = null;
 	}
 
 	/**
@@ -109,8 +115,9 @@ class Counterspot {
 	 * @param {djs.Message} message The message to report the issue on.
 	 * @param {String} issue The issue text.
 	 * @param {djs.EmojiResolvable} reactionEmoji The reaction emoji to add to the reported message.
+	 * @param {djs.EmbedFieldData[]} additionalLogFields Additional fields to add to the log embed.
 	 */
-	async reportCountIssue(message, issue, reactionEmoji) {
+	async reportCountIssue(message, issue, reactionEmoji, additionalLogFields = []) {
 		if (this.config.report.addReaction) {
 			message.react(reactionEmoji);
 		}
@@ -126,6 +133,23 @@ class Counterspot {
 			title: "Count Issue",
 		});
 		const issueMessage = await message.channel.send(embed);
+
+		// Send to log channel
+		if (this.logChannel) {
+			const logEmbed = new djs.MessageEmbed(embed).addFields([
+				{
+					inline: true,
+					name: "Author",
+					value: `<@${message.author.id}> (\`${message.author.tag}\`)`,
+				},
+				{
+					name: "Message",
+					value: `https://discord.com/channels/${message.guild.id}/${message.channel.id}/${message.id}`,
+				},
+				...(this.config.report.log.showAdditionalFields ? additionalLogFields : []),
+			]);
+			this.logChannel.send(logEmbed);
+		}
 
 		if (typeof this.config.report.deletionTimeout === "number") {
 			setTimeout(() => {
@@ -145,10 +169,41 @@ class Counterspot {
 	}
 
 	/**
+	 * Fetches the log channel.
+	 */
+	async fetchLogChannel() {
+		const logChannelID = this.config.report.log.channel.trim();
+		if (logChannelID === "") return;
+
+		try {
+			const logChannel = await this.client.channels.fetch(logChannelID);
+			if (logChannel && typeof logChannel.send === "function") {
+				this.logChannel = logChannel;
+			} else {
+				log("log channel (id: %s) must be text-based", logChannelID);
+			}
+		} catch (error) {
+			if (error.httpStatus === 404) {
+				log("could not find log channel (id: %s)", logChannelID);
+			} else if (error.code === 50001) {
+				log("missing access to log channel (id: %s)", logChannelID);
+			} else {
+				log("could not fetch log channel (id: %s): %o", logChannelID, error);
+			}
+		}
+	}
+
+	/**
 	 * Launches the bot client and starts validating counting messages.
 	 */
 	async launch() {
 		await this.loadCache();
+
+		await this.client.login(this.config.token);
+
+		if (this.config.report && this.config.report.log && typeof this.config.report.log.channel === "string") {
+			await this.fetchLogChannel();
+		}
 
 		this.client.on("message", message => {
 			if (message.author.bot) return;
@@ -165,7 +220,16 @@ class Counterspot {
 			}
 
 			if (!this.isCorrectCount(count)) {
-				return this.reportCountIssue(message, `Count is incorrect (expected count: ${this.getExpectedCount()})`, "⚠️");
+				const expectedCount = this.getExpectedCount();
+				return this.reportCountIssue(message, `Count is incorrect (expected count: ${expectedCount})`, "⚠️", [{
+					inline: true,
+					name: "Found Count",
+					value: count,
+				}, {
+					inline: true,
+					name: "Expected Count",
+					value: expectedCount,
+				}]);
 			} else if (this.cache.lastCounter === message.author.id) {
 				return this.reportCountIssue(message, "Cannot count multiple times in a row", "👥");
 			}
@@ -175,7 +239,6 @@ class Counterspot {
 			this.cache.lastCount = count;
 			this.saveCache();
 		});
-		this.client.login(this.config.token);
 	}
 }
 module.exports = Counterspot;
