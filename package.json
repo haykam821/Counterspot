@@ -5,7 +5,8 @@
 	"main": "./src/index.js",
 	"scripts": {
 		"test": "echo \"Error: no test specified\" && exit 1",
-		"start": "node ./src/app.js"
+		"start": "node ./src/app.js",
+		"lint": "eslint \"./**/*.js\" --ignore-path .gitignore"
 	},
 	"repository": {
 		"type": "git",
@@ -28,5 +29,17 @@
 		"discord.js": "^12.2.0",
 		"fs-extra": "^9.0.1",
 		"merge-deep": "^3.0.2"
+	},
+	"devDependencies": {
+		"eslint": "^6.8.0",
+		"eslint-config-haykam": "^1.8.0",
+		"eslint-plugin-extra-rules": "0.0.0-development",
+		"eslint-plugin-html": "^6.0.2",
+		"eslint-plugin-json": "^1.4.0",
+		"eslint-plugin-markdown": "^1.0.2",
+		"eslint-plugin-unicorn": "^10.0.0"
+	},
+	"eslintConfig": {
+		"extends": "eslint-config-haykam"
 	}
 }
