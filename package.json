@@ -1,0 +1,24 @@
+{
+	"name": "counterspot",
+	"description": "A simple counting bot for Discord.",
+	"version": "1.0.0",
+	"main": "./src/index.js",
+	"scripts": {
+		"test": "echo \"Error: no test specified\" && exit 1"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/haykam821/Counterspot.git"
+	},
+	"keywords": [
+		"counting",
+		"discord",
+		"bot"
+	],
+	"author": "haykam821",
+	"license": "MIT",
+	"bugs": {
+		"url": "https://github.com/haykam821/Counterspot/issues"
+	},
+	"homepage": "https://github.com/haykam821/Counterspot#readme"
+}
