@@ -135,6 +135,16 @@ class Counterspot {
 	}
 
 	/**
+	 * Determines whether a user is blacklisted from counting.
+	 * @param {djs.User} user The user.
+	 * @returns {boolean} Whether the user is blacklisted.
+	 */
+	isBlacklisted(user) {
+		if (!Array.isArray(this.config.blacklist)) return false;
+		return this.config.blacklist.includes(user.id);
+	}
+
+	/**
 	 * Launches the bot client and starts validating counting messages.
 	 */
 	async launch() {
@@ -143,6 +153,10 @@ class Counterspot {
 		this.client.on("message", message => {
 			if (message.author.bot) return;
 			if (message.channel.id !== this.config.channel) return;
+
+			if (this.isBlacklisted(message.author)) {
+				return this.reportCountIssue(message, "User is blacklisted from counting", "🚫");
+			}
 
 			log("handling count by %s (id: %s)", message.author.tag, message.id);
 			const count = this.parseCount(message.content);

@@ -4,6 +4,7 @@ const mergeDeep = require("merge-deep");
 const { configuration: log } = require("./debug.js");
 
 const baseConfig = {
+	blacklist: [],
 	cachePath: "./cache.json",
 	count: {
 		amount: 1,
