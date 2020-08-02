@@ -214,7 +214,7 @@ class Counterspot {
 			await this.fetchLogChannel();
 		}
 
-		this.client.on("message", message => {
+		this.client.on("message", async message => {
 			if (message.author.bot) return;
 			if (message.channel.id !== this.config.channel) return;
 
@@ -282,6 +282,27 @@ class Counterspot {
 					message.channel.send(embed);
 				}
 
+				const lastCounter = await message.guild.members.fetch(this.cache.lastCounter);
+
+				if (typeof this.config.goal.roles === "object") {
+					const roleReason = "Reward for reaching counting goal: " + count;
+
+					if (this.config.goal.roles.achiever) {
+						message.member.roles.add(this.config.goal.roles.achiever, roleReason).then(() => {
+							log("added achiever role to %s (id: %s)", message.author.tag, message.id);
+						}).catch(error => {
+							log("could not add achiever role to %s (id: %s): %o", message.author.tag, message.id, error);
+						});
+					}
+					if (this.config.goal.roles.assistant) {
+						lastCounter.roles.add(this.config.goal.roles.assistant, roleReason).then(() => {
+							log("added assistant role to %s (id: %s)", lastCounter.user.tag, lastCounter.id);
+						}).catch(error => {
+							log("could not add assistant role to %s (id: %s): %o", lastCounter.user.tag, lastCounter.id, error);
+						});
+					}
+				}
+
 				// Send to log channel
 				if (this.logChannel) {
 					const logEmbed = this.getLogEmbed(message, embed, [{
@@ -291,7 +312,7 @@ class Counterspot {
 					}, {
 						inline: true,
 						name: "Assistant",
-						value: `<@${this.cache.lastCounter}>`,
+						value: `<@${lastCounter.id}> (\`${lastCounter.user.tag}\`)`,
 					}]);
 					this.logChannel.send(logEmbed);
 				}

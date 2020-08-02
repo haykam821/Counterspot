@@ -17,6 +17,10 @@ const baseConfig = {
 		pin: true,
 		reset: false,
 		resetValue: 0,
+		roles: {
+			achiever: "",
+			assistant: "",
+		},
 	},
 	report: {
 		addReaction: true,
