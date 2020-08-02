@@ -18,15 +18,15 @@ class Counterspot {
 
 		this.cache = {
 			/**
-			 * The ID of the last counter.
-			 * @type {string}
-			 */
-			lastCounter: null,
-			/**
 			 * The value of the last count.
 			 * @type {number}
 			 */
 			lastCount: 0,
+			/**
+			 * The ID of the last counter.
+			 * @type {string}
+			 */
+			lastCounter: null,
 		};
 	}
 
@@ -48,7 +48,7 @@ class Counterspot {
 	 * Saves the cache.
 	 */
 	async saveCache() {
-		fse.writeJSON(this.config.cachePath, this.cache);
+		await fse.writeJSON(this.config.cachePath, this.cache);
 		log("saved the cache to %s", this.config.cachePath);
 	}
 
@@ -103,7 +103,7 @@ class Counterspot {
 			}
 		}
 	}
-	
+
 	/**
 	 * Reports a count issue for a message.
 	 * @param {djs.Message} message The message to report the issue on.
@@ -117,8 +117,8 @@ class Counterspot {
 
 		const embed = new djs.MessageEmbed({
 			author: this.config.report.showAuthor && {
-				name: message.author.username,
 				iconURL: message.author.avatarURL(),
+				name: message.author.username,
 			},
 			color: 0xFF0000,
 			description: issue + " " + reactionEmoji,
@@ -148,7 +148,7 @@ class Counterspot {
 	 * Launches the bot client and starts validating counting messages.
 	 */
 	async launch() {
-		this.loadCache();
+		await this.loadCache();
 
 		this.client.on("message", message => {
 			if (message.author.bot) return;
