@@ -11,6 +11,13 @@ const baseConfig = {
 		channel: "",
 		direction: 1,
 	},
+	goal: {
+		announce: true,
+		multiple: 100,
+		pin: true,
+		reset: false,
+		resetValue: 0,
+	},
 	report: {
 		addReaction: true,
 		deletionTimeout: 5000,

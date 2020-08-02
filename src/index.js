@@ -111,13 +111,33 @@ class Counterspot {
 	}
 
 	/**
+	 * Gets the log version of an embed.
+	 * @param {djs.Message} message The message context.
+	 * @param {djs.MessageEmbed} embed The original embed.
+	 * @param {djs.EmbedFieldData[]} additionalFields Additional fields to add to the log embed.
+	 * @returns {djs.MessageEmbed} The log version of the embed.
+	 */
+	getLogEmbed(message, embed, additionalFields = []) {
+		return new djs.MessageEmbed(embed).addFields([{
+			inline: true,
+			name: "Author",
+			value: `<@${message.author.id}> (\`${message.author.tag}\`)`,
+		},
+		{
+			name: "Message",
+			value: `https://discord.com/channels/${message.guild.id}/${message.channel.id}/${message.id}`,
+		},
+		...(this.config.report.log.showAdditionalFields ? additionalFields : [])]);
+	}
+
+	/**
 	 * Reports a count issue for a message.
 	 * @param {djs.Message} message The message to report the issue on.
 	 * @param {String} issue The issue text.
 	 * @param {djs.EmojiResolvable} reactionEmoji The reaction emoji to add to the reported message.
-	 * @param {djs.EmbedFieldData[]} additionalLogFields Additional fields to add to the log embed.
+	 * @param {djs.EmbedFieldData[]} additionalFields Additional fields to add to the log embed.
 	 */
-	async reportCountIssue(message, issue, reactionEmoji, additionalLogFields = []) {
+	async reportCountIssue(message, issue, reactionEmoji, additionalFields = []) {
 		if (this.config.report.addReaction) {
 			message.react(reactionEmoji);
 		}
@@ -136,18 +156,7 @@ class Counterspot {
 
 		// Send to log channel
 		if (this.logChannel) {
-			const logEmbed = new djs.MessageEmbed(embed).addFields([
-				{
-					inline: true,
-					name: "Author",
-					value: `<@${message.author.id}> (\`${message.author.tag}\`)`,
-				},
-				{
-					name: "Message",
-					value: `https://discord.com/channels/${message.guild.id}/${message.channel.id}/${message.id}`,
-				},
-				...(this.config.report.log.showAdditionalFields ? additionalLogFields : []),
-			]);
+			const logEmbed = this.getLogEmbed(message, embed, additionalFields);
 			this.logChannel.send(logEmbed);
 		}
 
@@ -231,12 +240,66 @@ class Counterspot {
 					value: expectedCount,
 				}]);
 			} else if (this.cache.lastCounter === message.author.id) {
-				return this.reportCountIssue(message, "Cannot count multiple times in a row", "👥");
+				// Return this.reportCountIssue(message, "Cannot count multiple times in a row", "👥");
+			}
+
+			const reachedGoal = typeof this.config.goal === "object" && count % this.config.goal.multiple === 0;
+			if (reachedGoal) {
+				if (this.config.goal.pin) {
+					message.pin().catch(error => {
+						if (error.code === 50013) {
+							log("could not pin goal count (id: %s) due to missing permissions", message.id);
+						} else {
+							log("could not pin goal count (id: %s): %o", message.id, error);
+						}
+					});
+				}
+
+				const announcementParts = [];
+
+				if (this.cache.lastCounter && message.author.id !== this.cache.lastCounter) {
+					announcementParts.push(`Congratulations on reaching the goal at ${count}, <@${message.author.id}>, with assistance from <@${this.cache.lastCounter}>.`);
+				} else {
+					announcementParts.push(`Congratulations on reaching the goal at ${count}, <@${message.author.id}>!`);
+				}
+
+				if (this.config.goal.reset) {
+					announcementParts.push(`Counting can now restart at ${this.getLocaleCount(this.config.goal.resetValue)}.`);
+				}
+
+				const embed = new djs.MessageEmbed({
+					author: this.config.report.showAuthor && {
+						iconURL: message.author.avatarURL(),
+						name: message.author.username,
+					},
+					color: 0x72C42B,
+					description: announcementParts.join(" "),
+					timestamp: this.config.report.showTimestamp && Date.now(),
+					title: "Counting Goal Reached",
+				});
+
+				if (this.config.goal.announce) {
+					message.channel.send(embed);
+				}
+
+				// Send to log channel
+				if (this.logChannel) {
+					const logEmbed = this.getLogEmbed(message, embed, [{
+						inline: true,
+						name: "Goal Count",
+						value: count,
+					}, {
+						inline: true,
+						name: "Assistant",
+						value: `<@${this.cache.lastCounter}>`,
+					}]);
+					this.logChannel.send(logEmbed);
+				}
 			}
 
 			// Update cache
 			this.cache.lastCounter = message.author.id;
-			this.cache.lastCount = count;
+			this.cache.lastCount = reachedGoal && this.config.goal.reset ? this.config.goal.resetValue : count;
 			this.saveCache();
 		});
 	}
