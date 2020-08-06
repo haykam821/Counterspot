@@ -3,6 +3,12 @@ const fse = require("fs-extra");
 
 const { main: log } = require("./utils/debug.js");
 
+/**
+ * A counter's statistics for a certain period.
+ * @typedef {Object} CounterStatistics
+ * @property {number} counts The number of counts the counter has made.
+ */
+
 class Counterspot {
 	constructor(config) {
 		if (typeof config !== "object" || config == null) {
@@ -17,6 +23,10 @@ class Counterspot {
 		this.client = new djs.Client(config.token);
 
 		this.cache = {
+			/**
+			 * @type {Object<string, CounterStatistics>}
+			 */
+			countStats: {},
 			/**
 			 * The value of the last count.
 			 * @type {number}
@@ -203,6 +213,19 @@ class Counterspot {
 	}
 
 	/**
+	 * Gets a report of counter statistics.
+	 * @returns {string} The counter statistics.
+	 */
+	getStatisticsReport() {
+		/* eslint-disable-next-line no-unused-vars */
+		return Object.entries(this.cache.countStats).sort(([ firstCounterID, firstStats ], [ secondCounterID, secondStats ]) => {
+			return secondStats.counts - firstStats.counts;
+		}).map(([ counterID, stats ]) => {
+			return `• <@${counterID}> - ${stats.counts} count${stats.counts === 1 ? "" : "s"}`;
+		}).join("\n");
+	}
+
+	/**
 	 * Launches the bot client and starts validating counting messages.
 	 */
 	async launch() {
@@ -243,6 +266,16 @@ class Counterspot {
 				return this.reportCountIssue(message, "Cannot count multiple times in a row", "👥");
 			}
 
+			if (this.config.goal.trackStatistics) {
+				if (typeof this.cache.countStats[message.author.id] !== "object") {
+					// Initialize statistics for the counter
+					this.cache.countStats[message.author.id] = {
+						counts: 0,
+					};
+				}
+				this.cache.countStats[message.author.id].counts += 1;
+			}
+
 			const reachedGoal = typeof this.config.goal === "object" && count % this.config.goal.multiple === 0;
 			if (reachedGoal) {
 				if (this.config.goal.pin) {
@@ -274,9 +307,16 @@ class Counterspot {
 					},
 					color: 0x72C42B,
 					description: announcementParts.join(" "),
+					fields: this.config.goal.trackStatistics ? [] : [{
+						name: "Statistics",
+						value: this.getStatisticsReport(),
+					}],
 					timestamp: this.config.report.showTimestamp && Date.now(),
 					title: "Counting Goal Reached",
 				});
+
+				// Reset counting statistics
+				this.cache.countStats = {};
 
 				if (this.config.goal.announce) {
 					message.channel.send(embed);

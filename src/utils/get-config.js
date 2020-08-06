@@ -22,6 +22,7 @@ const baseConfig = {
 			achiever: "",
 			assistant: "",
 		},
+		trackStatistics: true,
 	},
 	report: {
 		addReaction: true,
