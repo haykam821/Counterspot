@@ -75,7 +75,7 @@ class Counterspot {
 	 */
 	parseCount(content) {
 		const numberString = content.split(" ")[0];
-		return parseFloat(numberString.replace(/[^0-9.]/g, ""));
+		return parseFloat(numberString.replace(/[^\d.]/g, ""));
 	}
 
 	/**
