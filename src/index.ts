@@ -1,56 +1,62 @@
-const djs = require("discord.js");
-const fse = require("fs-extra");
+import { Client, Snowflake } from "discord.js";
+import { CountDirection, CounterspotConfig } from "./utils/get-config";
+import { EmbedFieldData, EmojiResolvable, Message, MessageEmbed, TextChannel, User } from "discord.js";
 
-const { main: log } = require("./utils/debug.js");
+import fse from "fs-extra";
+import { log } from "./utils/debug";
 
 /**
  * A counter's statistics for a certain period.
- * @typedef {Object} CounterStatistics
- * @property {number} counts The number of counts the counter has made.
  */
+interface CounterStatistics {
+	/**
+	 * The number of counts the counter has made.
+	 */
+	counts: number;
+}
 
-class Counterspot {
-	constructor(config) {
+interface CountingCache {
+	countStats: Record<Snowflake, CounterStatistics>;
+	/**
+	 * The value of the last count.
+	 */
+	lastCount: number;
+	/**
+	 * The ID of the last counter.
+	 */
+	lastCounter: Snowflake;
+}
+
+export default class Counterspot {
+	private readonly config: CounterspotConfig;
+	/**
+	 * The Discord client.
+	 */
+	private readonly client: Client;
+	/**
+	 * The channel to log to.
+	 */
+	private logChannel: TextChannel = null;
+	private cache: CountingCache = {
+		countStats: {},
+		lastCount: 0,
+		lastCounter: null,
+	};
+
+	constructor(config: CounterspotConfig) {
 		if (typeof config !== "object" || config == null) {
 			throw new TypeError("A config must be supplied");
 		}
 		this.config = config;
 
-		/**
-		 * The Discord client.
-		 * @type {djs.Client}
-		 */
-		this.client = new djs.Client(config.token);
-
-		this.cache = {
-			/**
-			 * @type {Object<string, CounterStatistics>}
-			 */
-			countStats: {},
-			/**
-			 * The value of the last count.
-			 * @type {number}
-			 */
-			lastCount: 0,
-			/**
-			 * The ID of the last counter.
-			 * @type {string}
-			 */
-			lastCounter: null,
-		};
-
-		/**
-		 * The channel to log to.
-		 * @type {djs.TextBasedChannel?}
-		 */
-		this.logChannel = null;
+		this.client = new Client();
 	}
 
 	/**
 	 * Loads the cache.
-	 * @returns {Object} The cache.
+	 * @returns The cache.
 	 */
-	async loadCache() {
+	async loadCache(): Promise<CountingCache> {
 		log("loading cache from %s", this.config.cachePath);
 		try {
 			this.cache = await fse.readJSON(this.config.cachePath);
@@ -63,30 +69,30 @@ class Counterspot {
 	/**
 	 * Saves the cache.
 	 */
-	async saveCache() {
+	async saveCache(): Promise<void> {
 		await fse.writeJSON(this.config.cachePath, this.cache);
 		log("saved the cache to %s", this.config.cachePath);
 	}
 
 	/**
 	 * Parses a count from a message's count.
-	 * @param {string} content The message content.
-	 * @returns {number} The parsed count, or NaN.
+	 * @param content The message content.
+	 * @returns The parsed count, or NaN.
 	 */
-	parseCount(content) {
+	parseCount(content: string): number {
 		const numberString = content.split(" ")[0];
 		return parseFloat(numberString.replace(/[^\d.]/g, ""));
 	}
 
 	/**
 	 * Determines whether the count is correct in relation to the last count.
-	 * @param {number} count The count.
-	 * @returns {boolean} Whether the count is correct.
+	 * @param count The count.
+	 * @returns Whether the count is correct.
 	 */
-	isCorrectCount(count) {
-		if (this.config.count.direction === -1) {
+	isCorrectCount(count: number): boolean {
+		if (this.config.count.direction === CountDirection.NEGATIVE) {
 			return count === this.cache.lastCount - this.config.count.amount;
-		} else if (this.config.count.direction === 1) {
+		} else if (this.config.count.direction === CountDirection.POSITIVE) {
 			return count === this.cache.lastCount + this.config.count.amount;
 		}
 
@@ -95,23 +101,23 @@ class Counterspot {
 
 	/**
 	 * Gets the locale string for a count;
-	 * @param {number} count The count to get the locale string for.
-	 * @returns {string} The locale string of the count.
+	 * @param count The count to get the locale string for.
+	 * @returns The locale string of the count.
 	 */
-	getLocaleCount(count) {
+	getLocaleCount(count: number): string {
 		return count.toLocaleString("en-US");
 	}
 
 	/**
 	 * Gets the expected count(s) as a messag.
-	 * @returns {string} The expected count(s).
+	 * @returns The expected count(s).
 	 */
-	getExpectedCount() {
+	getExpectedCount(): string {
 		switch (this.config.count.direction) {
-			case -1: {
+			case CountDirection.NEGATIVE: {
 				return this.getLocaleCount(this.cache.lastCount - this.config.count.amount);
 			}
-			case 1: {
+			case CountDirection.POSITIVE: {
 				return this.getLocaleCount(this.cache.lastCount + this.config.count.amount);
 			}
 			default: {
@@ -122,13 +128,13 @@ class Counterspot {
 
 	/**
 	 * Gets the log version of an embed.
-	 * @param {djs.Message} message The message context.
-	 * @param {djs.MessageEmbed} embed The original embed.
-	 * @param {djs.EmbedFieldData[]} additionalFields Additional fields to add to the log embed.
-	 * @returns {djs.MessageEmbed} The log version of the embed.
+	 * @param message The message context.
+	 * @param embed The original embed.
+	 * @param additionalFields Additional fields to add to the log embed.
+	 * @returns The log version of the embed.
 	 */
-	getLogEmbed(message, embed, additionalFields = []) {
-		return new djs.MessageEmbed(embed).addFields([{
+	getLogEmbed(message: Message, embed: MessageEmbed, additionalFields: EmbedFieldData[] = []): MessageEmbed {
+		return new MessageEmbed(embed).addFields([{
 			inline: true,
 			name: "Author",
 			value: `<@${message.author.id}> (\`${message.author.tag}\`)`,
@@ -142,17 +148,17 @@ class Counterspot {
 
 	/**
 	 * Reports a count issue for a message.
-	 * @param {djs.Message} message The message to report the issue on.
-	 * @param {String} issue The issue text.
-	 * @param {djs.EmojiResolvable} reactionEmoji The reaction emoji to add to the reported message.
-	 * @param {djs.EmbedFieldData[]} additionalFields Additional fields to add to the log embed.
+	 * @param message The message to report the issue on.
+	 * @param issue The issue text.
+	 * @param reactionEmoji The reaction emoji to add to the reported message.
+	 * @param additionalFields Additional fields to add to the log embed.
 	 */
-	async reportCountIssue(message, issue, reactionEmoji, additionalFields = []) {
+	async reportCountIssue(message: Message, issue: string, reactionEmoji: EmojiResolvable, additionalFields: EmbedFieldData[] = []): Promise<void> {
 		if (this.config.report.addReaction) {
 			message.react(reactionEmoji);
 		}
 
-		const embed = new djs.MessageEmbed({
+		const embed = new MessageEmbed({
 			author: this.config.report.showAuthor && {
 				iconURL: message.author.avatarURL(),
 				name: message.author.username,
@@ -179,10 +185,10 @@ class Counterspot {
 
 	/**
 	 * Determines whether a user is blacklisted from counting.
-	 * @param {djs.User} user The user.
-	 * @returns {boolean} Whether the user is blacklisted.
+	 * @param user The user.
+	 * @returns Whether the user is blacklisted.
 	 */
-	isBlacklisted(user) {
+	isBlacklisted(user: User): boolean {
 		if (!Array.isArray(this.config.blacklist)) return false;
 		return this.config.blacklist.includes(user.id);
 	}
@@ -190,13 +196,13 @@ class Counterspot {
 	/**
 	 * Fetches the log channel.
 	 */
-	async fetchLogChannel() {
+	async fetchLogChannel(): Promise<void> {
 		const logChannelID = this.config.report.log.channel.trim();
 		if (logChannelID === "") return;
 
 		try {
 			const logChannel = await this.client.channels.fetch(logChannelID);
-			if (logChannel && typeof logChannel.send === "function") {
+			if (logChannel && logChannel instanceof TextChannel) {
 				this.logChannel = logChannel;
 			} else {
 				log("log channel (id: %s) must be text-based", logChannelID);
@@ -214,12 +220,12 @@ class Counterspot {
 
 	/**
 	 * Gets a report of counter statistics.
-	 * @returns {string} The counter statistics.
+	 * @returns The counter statistics.
 	 */
-	getStatisticsReport() {
+	getStatisticsReport(): string {
 		/* eslint-disable-next-line no-unused-vars */
-		return Object.entries(this.cache.countStats).sort(([ firstCounterID, firstStats ], [ secondCounterID, secondStats ]) => {
-			return secondStats.counts - firstStats.counts;
+		return Object.entries(this.cache.countStats).sort((firstEntry, secondEntry) => {
+			return firstEntry[1].counts - secondEntry[1].counts;
 		}).map(([ counterID, stats ]) => {
 			return `• <@${counterID}> - ${stats.counts} count${stats.counts === 1 ? "" : "s"}`;
 		}).join("\n");
@@ -228,7 +234,7 @@ class Counterspot {
 	/**
 	 * Launches the bot client and starts validating counting messages.
 	 */
-	async launch() {
+	async launch(): Promise<void> {
 		await this.loadCache();
 
 		await this.client.login(this.config.token);
@@ -300,7 +306,7 @@ class Counterspot {
 					announcementParts.push(`Counting can now restart at ${this.getLocaleCount(this.config.goal.resetValue)}.`);
 				}
 
-				const embed = new djs.MessageEmbed({
+				const embed = new MessageEmbed({
 					author: this.config.report.showAuthor && {
 						iconURL: message.author.avatarURL(),
 						name: message.author.username,
@@ -365,4 +371,3 @@ class Counterspot {
 		});
 	}
 }
-module.exports = Counterspot;
