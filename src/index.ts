@@ -50,6 +50,8 @@ export default class Counterspot {
 		this.config = config;
 
 		this.client = new Client();
+
+		this.handleMessage = this.handleMessage.bind(this);
 	}
 
 	/**
@@ -243,131 +245,141 @@ export default class Counterspot {
 			await this.fetchLogChannel();
 		}
 
-		this.client.on("message", async message => {
-			if (message.author.bot) return;
-			if (message.channel.id !== this.config.channel) return;
+		this.client.on("message", this.handleMessage);
+	}
 
-			if (this.isBlacklisted(message.author)) {
-				return this.reportCountIssue(message, "User is blacklisted from counting", "🚫");
+	private async handleMessage(message: Message): Promise<void> {
+		if (message.author.bot) return;
+		if (message.channel.id !== this.config.channel) return;
+
+		if (this.isBlacklisted(message.author)) {
+			return this.reportCountIssue(message, "User is blacklisted from counting", "🚫");
+		}
+
+		log("handling count by %s (id: %s)", message.author.tag, message.id);
+		const count = this.parseCount(message.content);
+		await this.handleCount(message, count);
+	}
+
+	private async handleCount(message: Message, count: number): Promise<void> {
+		if (Number.isNaN(count)) {
+			return this.reportCountIssue(message, "Count was not found at the beginning of the message", "❔");
+		}
+
+		if (!this.isCorrectCount(count)) {
+			const expectedCount = this.getExpectedCount();
+			return this.reportCountIssue(message, `Count is incorrect (expected count: ${expectedCount})`, "⚠️", [{
+				inline: true,
+				name: "Found Count",
+				value: count,
+			}, {
+				inline: true,
+				name: "Expected Count",
+				value: expectedCount,
+			}]);
+		} else if (this.cache.lastCounter === message.author.id && !this.config.count.multipleBySameUser) {
+			return this.reportCountIssue(message, "Cannot count multiple times in a row", "👥");
+		}
+
+		if (this.config.goal.trackStatistics) {
+			if (typeof this.cache.countStats[message.author.id] !== "object") {
+				// Initialize statistics for the counter
+				this.cache.countStats[message.author.id] = {
+					counts: 0,
+				};
 			}
+			this.cache.countStats[message.author.id].counts += 1;
+		}
 
-			log("handling count by %s (id: %s)", message.author.tag, message.id);
-			const count = this.parseCount(message.content);
-			if (Number.isNaN(count)) {
-				return this.reportCountIssue(message, "Count was not found at the beginning of the message", "❔");
-			}
+		const reachedGoal = typeof this.config.goal === "object" && count % this.config.goal.multiple === 0;
+		if (reachedGoal) {
+			await this.handleGoalReached(message, count);
+		}
 
-			if (!this.isCorrectCount(count)) {
-				const expectedCount = this.getExpectedCount();
-				return this.reportCountIssue(message, `Count is incorrect (expected count: ${expectedCount})`, "⚠️", [{
-					inline: true,
-					name: "Found Count",
-					value: count,
-				}, {
-					inline: true,
-					name: "Expected Count",
-					value: expectedCount,
-				}]);
-			} else if (this.cache.lastCounter === message.author.id && !this.config.count.multipleBySameUser) {
-				return this.reportCountIssue(message, "Cannot count multiple times in a row", "👥");
-			}
+		// Update cache
+		this.cache.lastCounter = message.author.id;
+		this.cache.lastCount = reachedGoal && this.config.goal.reset ? this.config.goal.resetValue : count;
+		this.saveCache();
+	}
 
-			if (this.config.goal.trackStatistics) {
-				if (typeof this.cache.countStats[message.author.id] !== "object") {
-					// Initialize statistics for the counter
-					this.cache.countStats[message.author.id] = {
-						counts: 0,
-					};
-				}
-				this.cache.countStats[message.author.id].counts += 1;
-			}
-
-			const reachedGoal = typeof this.config.goal === "object" && count % this.config.goal.multiple === 0;
-			if (reachedGoal) {
-				if (this.config.goal.pin) {
-					message.pin().catch(error => {
-						if (error.code === 50013) {
-							log("could not pin goal count (id: %s) due to missing permissions", message.id);
-						} else {
-							log("could not pin goal count (id: %s): %o", message.id, error);
-						}
-					});
-				}
-
-				const announcementParts = [];
-
-				if (this.cache.lastCounter && message.author.id !== this.cache.lastCounter) {
-					announcementParts.push(`Congratulations on reaching the goal at ${count}, <@${message.author.id}>, with assistance from <@${this.cache.lastCounter}>.`);
+	private async handleGoalReached(message: Message, count: number): Promise<void> {
+		if (this.config.goal.pin) {
+			message.pin().catch(error => {
+				if (error.code === 50013) {
+					log("could not pin goal count (id: %s) due to missing permissions", message.id);
 				} else {
-					announcementParts.push(`Congratulations on reaching the goal at ${count}, <@${message.author.id}>!`);
+					log("could not pin goal count (id: %s): %o", message.id, error);
 				}
+			});
+		}
 
-				if (this.config.goal.reset) {
-					announcementParts.push(`Counting can now restart at ${this.getLocaleCount(this.config.goal.resetValue)}.`);
-				}
+		const announcementParts = [];
 
-				const embed = new MessageEmbed({
-					author: this.config.report.showAuthor && {
-						iconURL: message.author.avatarURL(),
-						name: message.author.username,
-					},
-					color: 0x72C42B,
-					description: announcementParts.join(" "),
-					fields: this.config.goal.trackStatistics ? [] : [{
-						name: "Statistics",
-						value: this.getStatisticsReport(),
-					}],
-					timestamp: this.config.report.showTimestamp && Date.now(),
-					title: "Counting Goal Reached",
-				});
+		if (this.cache.lastCounter && message.author.id !== this.cache.lastCounter) {
+			announcementParts.push(`Congratulations on reaching the goal at ${count}, <@${message.author.id}>, with assistance from <@${this.cache.lastCounter}>.`);
+		} else {
+			announcementParts.push(`Congratulations on reaching the goal at ${count}, <@${message.author.id}>!`);
+		}
 
-				// Reset counting statistics
-				this.cache.countStats = {};
+		if (this.config.goal.reset) {
+			announcementParts.push(`Counting can now restart at ${this.getLocaleCount(this.config.goal.resetValue)}.`);
+		}
 
-				if (this.config.goal.announce) {
-					message.channel.send(embed);
-				}
-
-				const lastCounter = await message.guild.members.fetch(this.cache.lastCounter);
-
-				if (typeof this.config.goal.roles === "object") {
-					const roleReason = "Reward for reaching counting goal: " + count;
-
-					if (this.config.goal.roles.achiever) {
-						message.member.roles.add(this.config.goal.roles.achiever, roleReason).then(() => {
-							log("added achiever role to %s (id: %s)", message.author.tag, message.id);
-						}).catch(error => {
-							log("could not add achiever role to %s (id: %s): %o", message.author.tag, message.id, error);
-						});
-					}
-					if (this.config.goal.roles.assistant) {
-						lastCounter.roles.add(this.config.goal.roles.assistant, roleReason).then(() => {
-							log("added assistant role to %s (id: %s)", lastCounter.user.tag, lastCounter.id);
-						}).catch(error => {
-							log("could not add assistant role to %s (id: %s): %o", lastCounter.user.tag, lastCounter.id, error);
-						});
-					}
-				}
-
-				// Send to log channel
-				if (this.logChannel) {
-					const logEmbed = this.getLogEmbed(message, embed, [{
-						inline: true,
-						name: "Goal Count",
-						value: count,
-					}, {
-						inline: true,
-						name: "Assistant",
-						value: `<@${lastCounter.id}> (\`${lastCounter.user.tag}\`)`,
-					}]);
-					this.logChannel.send(logEmbed);
-				}
-			}
-
-			// Update cache
-			this.cache.lastCounter = message.author.id;
-			this.cache.lastCount = reachedGoal && this.config.goal.reset ? this.config.goal.resetValue : count;
-			this.saveCache();
+		const embed = new MessageEmbed({
+			author: this.config.report.showAuthor && {
+				iconURL: message.author.avatarURL(),
+				name: message.author.username,
+			},
+			color: 0x72C42B,
+			description: announcementParts.join(" "),
+			fields: this.config.goal.trackStatistics ? [] : [{
+				name: "Statistics",
+				value: this.getStatisticsReport(),
+			}],
+			timestamp: this.config.report.showTimestamp && Date.now(),
+			title: "Counting Goal Reached",
 		});
+
+		// Reset counting statistics
+		this.cache.countStats = {};
+
+		if (this.config.goal.announce) {
+			message.channel.send(embed);
+		}
+
+		const lastCounter = await message.guild.members.fetch(this.cache.lastCounter);
+
+		if (typeof this.config.goal.roles === "object") {
+			const roleReason = "Reward for reaching counting goal: " + count;
+
+			if (this.config.goal.roles.achiever) {
+				message.member.roles.add(this.config.goal.roles.achiever, roleReason).then(() => {
+					log("added achiever role to %s (id: %s)", message.author.tag, message.id);
+				}).catch(error => {
+					log("could not add achiever role to %s (id: %s): %o", message.author.tag, message.id, error);
+				});
+			}
+			if (this.config.goal.roles.assistant) {
+				lastCounter.roles.add(this.config.goal.roles.assistant, roleReason).then(() => {
+					log("added assistant role to %s (id: %s)", lastCounter.user.tag, lastCounter.id);
+				}).catch(error => {
+					log("could not add assistant role to %s (id: %s): %o", lastCounter.user.tag, lastCounter.id, error);
+				});
+			}
+		}
+
+		// Send to log channel
+		if (this.logChannel) {
+			const logEmbed = this.getLogEmbed(message, embed, [{
+				inline: true,
+				name: "Goal Count",
+				value: count,
+			}, {
+				inline: true,
+				name: "Assistant",
+				value: `<@${lastCounter.id}> (\`${lastCounter.user.tag}\`)`,
+			}]);
+			this.logChannel.send(logEmbed);
+		}
 	}
 }
