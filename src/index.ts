@@ -1,4 +1,4 @@
-import { Client, Snowflake } from "discord.js";
+import { Client, Intents, Snowflake } from "discord.js";
 import { CountDirection, CounterspotConfig } from "./utils/get-config";
 import { EmbedFieldData, EmojiResolvable, Message, MessageEmbed, TextChannel, User } from "discord.js";
 
@@ -49,7 +49,13 @@ export default class Counterspot {
 		}
 		this.config = config;
 
-		this.client = new Client();
+		this.client = new Client({
+			intents: [
+				Intents.FLAGS.GUILDS,
+				Intents.FLAGS.GUILD_MESSAGES,
+				Intents.FLAGS.DIRECT_MESSAGES,
+			],
+		});
 
 		this.handleMessage = this.handleMessage.bind(this);
 	}
@@ -170,12 +176,20 @@ export default class Counterspot {
 			timestamp: this.config.report.showTimestamp && Date.now(),
 			title: "Count Issue",
 		});
-		const issueMessage = await message.channel.send(embed);
+		const issueMessage = await message.channel.send({
+			embeds: [
+				embed,
+			],
+		});
 
 		// Send to log channel
 		if (this.logChannel) {
 			const logEmbed = this.getLogEmbed(message, embed, additionalFields);
-			this.logChannel.send(logEmbed);
+			this.logChannel.send({
+				embeds: [
+					logEmbed,
+				],
+			});
 		}
 
 		if (typeof this.config.report.deletionTimeout === "number") {
@@ -245,7 +259,7 @@ export default class Counterspot {
 			await this.fetchLogChannel();
 		}
 
-		this.client.on("message", this.handleMessage);
+		this.client.on("messageCreate", this.handleMessage);
 	}
 
 	private async handleMessage(message: Message): Promise<void> {
@@ -271,7 +285,7 @@ export default class Counterspot {
 			return this.reportCountIssue(message, `Count is incorrect (expected count: ${expectedCount})`, "⚠️", [{
 				inline: true,
 				name: "Found Count",
-				value: count,
+				value: count.toString(),
 			}, {
 				inline: true,
 				name: "Expected Count",
@@ -344,7 +358,11 @@ export default class Counterspot {
 		this.cache.countStats = {};
 
 		if (this.config.goal.announce) {
-			message.channel.send(embed);
+			message.channel.send({
+				embeds: [
+					embed,
+				],
+			});
 		}
 
 		const lastCounter = await message.guild.members.fetch(this.cache.lastCounter);
@@ -373,13 +391,17 @@ export default class Counterspot {
 			const logEmbed = this.getLogEmbed(message, embed, [{
 				inline: true,
 				name: "Goal Count",
-				value: count,
+				value: count.toString(),
 			}, {
 				inline: true,
 				name: "Assistant",
 				value: `<@${lastCounter.id}> (\`${lastCounter.user.tag}\`)`,
 			}]);
-			this.logChannel.send(logEmbed);
+			this.logChannel.send({
+				embeds: [
+					logEmbed,
+				],
+			});
 		}
 	}
 }
