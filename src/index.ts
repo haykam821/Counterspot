@@ -240,11 +240,14 @@ export default class Counterspot {
 	 */
 	getStatisticsReport(): string {
 		/* eslint-disable-next-line no-unused-vars */
-		return Object.entries(this.cache.countStats).sort((firstEntry, secondEntry) => {
-			return firstEntry[1].counts - secondEntry[1].counts;
-		}).map(([ counterID, stats ]) => {
-			return `• <@${counterID}> - ${stats.counts} count${stats.counts === 1 ? "" : "s"}`;
-		}).join("\n");
+		return Object.entries(this.cache.countStats)
+			.sort((firstEntry, secondEntry) => {
+				return firstEntry[1].counts - secondEntry[1].counts;
+			})
+			.map(([ counterID, stats ]) => {
+				return `• <@${counterID}> - ${stats.counts} count${stats.counts === 1 ? "" : "s"}`;
+			})
+			.join("\n");
 	}
 
 	/**
@@ -371,18 +374,20 @@ export default class Counterspot {
 			const roleReason = "Reward for reaching counting goal: " + count;
 
 			if (this.config.goal.roles.achiever) {
-				message.member.roles.add(this.config.goal.roles.achiever, roleReason).then(() => {
+				try {
+					await message.member.roles.add(this.config.goal.roles.achiever, roleReason);
 					log("added achiever role to %s (id: %s)", message.author.tag, message.id);
-				}).catch(error => {
+				} catch (error) {
 					log("could not add achiever role to %s (id: %s): %o", message.author.tag, message.id, error);
-				});
+				}
 			}
 			if (this.config.goal.roles.assistant) {
-				lastCounter.roles.add(this.config.goal.roles.assistant, roleReason).then(() => {
+				try {
+					await lastCounter.roles.add(this.config.goal.roles.assistant, roleReason);
 					log("added assistant role to %s (id: %s)", lastCounter.user.tag, lastCounter.id);
-				}).catch(error => {
+				} catch (error) {
 					log("could not add assistant role to %s (id: %s): %o", lastCounter.user.tag, lastCounter.id, error);
-				});
+				}
 			}
 		}
 
