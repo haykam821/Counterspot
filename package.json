@@ -36,10 +36,10 @@
 		"@types/debug": "^4.1.5",
 		"@types/fs-extra": "^9.0.8",
 		"@types/merge-deep": "^3.0.0",
-		"@typescript-eslint/eslint-plugin": "^5.12.1",
-		"@typescript-eslint/parser": "^5.12.1",
-		"eslint": "^8.10.0",
-		"eslint-config-haykam": "^1.16.1",
+		"@typescript-eslint/eslint-plugin": "^5.57.0",
+		"@typescript-eslint/parser": "^5.57.0",
+		"eslint": "^8.36.0",
+		"eslint-config-haykam": "^1.19.0",
 		"ts-node-dev": "^2.0.0",
 		"typescript": "^5.0.2"
 	},
@@ -58,8 +58,7 @@
 			"@typescript-eslint/semi": "error",
 			"no-shadow": "off",
 			"@typescript-eslint/no-shadow": "error",
-			"sort-imports": "error",
-			"jsdoc/require-param-type": "off"
+			"sort-imports": "error"
 		}
 	}
 }
